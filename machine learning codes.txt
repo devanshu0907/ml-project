@@ -1,0 +1,644 @@
+import numpy as np
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense
+from tensorflow.keras.utils import to_categorical
+
+# Sample conversation data
+# You can replace this with your own conversational data
+input_texts = [
+    "Hi",
+    "How are you?",
+    "What's your name?",
+    "What can you do?",
+]
+target_texts = [
+    "Hello",
+    "I'm fine, thank you!",
+    "My name is Chatbot.",
+    "I can help you with information and tasks.",
+]
+
+# Tokenization
+input_characters = sorted(list(set("".join(input_texts))))
+target_characters = sorted(list(set("".join(target_texts))))
+num_encoder_tokens = len(input_characters)
+num_decoder_tokens = len(target_characters)
+max_encoder_seq_length = max([len(txt) for txt in input_texts])
+max_decoder_seq_length = max([len(txt) for txt in target_texts])
+
+input_token_index = dict([(char, i) for i, char in enumerate(input_characters)])
+target_token_index = dict([(char, i) for i, char in enumerate(target_characters)])
+
+encoder_input_data = np.zeros(
+    (len(input_texts), max_encoder_seq_length, num_encoder_tokens), dtype="float32"
+)
+decoder_input_data = np.zeros(
+    (len(target_texts), max_decoder_seq_length, num_decoder_tokens), dtype="float32"
+)
+decoder_target_data = np.zeros(
+    (len(target_texts), max_decoder_seq_length, num_decoder_tokens), dtype="float32"
+)
+
+for i, (input_text, target_text) in enumerate(zip(input_texts, target_texts)):
+    for t, char in enumerate(input_text):
+        encoder_input_data[i, t, input_token_index[char]] = 1.0
+    for t, char in enumerate(target_text):
+        decoder_input_data[i, t, target_token_index[char]] = 1.0
+        if t > 0:
+            decoder_target_data[i, t - 1, target_token_index[char]] = 1.0
+
+# Define the model
+latent_dim = 256
+
+encoder_inputs = Input(shape=(None, num_encoder_tokens))
+encoder = LSTM(latent_dim, return_state=True)
+encoder_outputs, state_h, state_c = encoder(encoder_inputs)
+encoder_states = [state_h, state_c]
+
+decoder_inputs = Input(shape=(None, num_decoder_tokens))
+decoder_lstm = LSTM(latent_dim, return_sequences=True, return_state=True)
+decoder_outputs, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
+decoder_dense = Dense(num_decoder_tokens, activation="softmax")
+decoder_outputs = decoder_dense(decoder_outputs)
+
+model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+# Compile and train the model
+model.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
+model.fit(
+    [encoder_input_data, decoder_input_data],
+    decoder_target_data,
+    batch_size=1,
+    epochs=50,
+    validation_split=0.2,
+)
+
+# Define inference models
+encoder_model = Model(encoder_inputs, encoder_states)
+
+decoder_state_input_h = Input(shape=(latent_dim,))
+decoder_state_input_c = Input(shape=(latent_dim,))
+decoder_states_inputs = [decoder_state_input_h, decoder_state_input_c]
+decoder_outputs, state_h, state_c = decoder_lstm(
+    decoder_inputs, initial_state=decoder_states_inputs
+)
+decoder_states = [state_h, state_c]
+decoder_outputs = decoder_dense(decoder_outputs)
+decoder_model = Model(
+    [decoder_inputs] + decoder_states_inputs, [decoder_outputs] + decoder_states
+)
+
+# Function to decode sequence
+def decode_sequence(input_seq):
+    states_value = encoder_model.predict(input_seq)
+
+    target_seq = np.zeros((1, 1, num_decoder_tokens))
+    target_seq[0, 0, target_token_index["\t"]] = 1.0
+
+    stop_condition = False
+    decoded_sentence = ""
+    while not stop_condition:
+        output_tokens, h, c = decoder_model.predict([target_seq] + states_value)
+
+        sampled_token_index = np.argmax(output_tokens[0, -1, :])
+        sampled_char = reverse_target_char_index[sampled_token_index]
+        decoded_sentence += sampled_char
+
+        if sampled_char == "\n" or len(decoded_sentence) > max_decoder_seq_length:
+            stop_condition = True
+
+        target_seq = np.zeros((1, 1, num_decoder_tokens))
+        target_seq[0, 0, sampled_token_index] = 1.0
+
+        states_value = [h, c]
+
+    return decoded_sentence
+
+# Test the model
+for seq_index in range(len(input_texts)):
+    input_seq = encoder_input_data[seq_index : seq_index + 1]
+    decoded_sentence = decode_sequence(input_seq)
+    print("-")
+    print("Input sentence:", input_texts[seq_index])
+    print("Decoded sentence:", decoded_sentence)
+
+
+
+
+
+phython..
+# Chatbot implementation using a simple RNN model with TensorFlow and Keras
+
+import numpy as np
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense
+from tensorflow.keras.utils import to_categorical
+
+# Sample conversation data
+input_texts = [
+    "Hi",
+    "How are you?",
+    "What's your name?",
+    "What can you do?",
+]
+target_texts = [
+    "Hello",
+    "I'm fine, thank you!",
+    "My name is Chatbot.",
+    "I can help you with information and tasks.",
+]
+
+# Tokenization
+input_characters = sorted(list(set("".join(input_texts))))
+target_characters = sorted(list(set("".join(target_texts))))
+num_encoder_tokens = len(input_characters)
+num_decoder_tokens = len(target_characters)
+max_encoder_seq_length = max([len(txt) for txt in input_texts])
+max_decoder_seq_length = max([len(txt) for txt in target_texts])
+
+input_token_index = dict([(char, i) for i, char in enumerate(input_characters)])
+target_token_index = dict([(char, i) for i, char in enumerate(target_characters)])
+
+# Prepare the data
+encoder_input_data = np.zeros(
+    (len(input_texts), max_encoder_seq_length, num_encoder_tokens), dtype="float32"
+)
+decoder_input_data = np.zeros(
+    (len(target_texts), max_decoder_seq_length, num_decoder_tokens), dtype="float32"
+)
+decoder_target_data = np.zeros(
+    (len(target_texts), max_decoder_seq_length, num_decoder_tokens), dtype="float32"
+)
+
+for i, (input_text, target_text) in enumerate(zip(input_texts, target_texts)):
+    for t, char in enumerate(input_text):
+        encoder_input_data[i, t, input_token_index[char]] = 1.0
+    for t, char in enumerate(target_text):
+        decoder_input_data[i, t, target_token_index[char]] = 1.0
+        if t > 0:
+            decoder_target_data[i, t - 1, target_token_index[char]] = 1.0
+
+# Define the RNN model
+latent_dim = 256
+
+encoder_inputs = Input(shape=(None, num_encoder_tokens))
+encoder = LSTM(latent_dim, return_state=True)
+encoder_outputs, state_h, state_c = encoder(encoder_inputs)
+encoder_states = [state_h, state_c]
+
+decoder_inputs = Input(shape=(None, num_decoder_tokens))
+decoder_lstm = LSTM(latent_dim, return_sequences=True, return_state=True)
+decoder_outputs, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
+decoder_dense = Dense(num_decoder_tokens, activation="softmax")
+decoder_outputs = decoder_dense(decoder_outputs)
+
+model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+# Compile and train the model
+model.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
+model.fit(
+    [encoder_input_data, decoder_input_data],
+    decoder_target_data,
+    batch_size=1,
+    epochs=50,
+    validation_split=0.2,
+)
+
+# Define inference models
+encoder_model = Model(encoder_inputs, encoder_states)
+
+decoder_state_input_h = Input(shape=(latent_dim,))
+decoder_state_input_c = Input(shape=(latent_dim,))
+decoder_states_inputs = [decoder
+
+
+
+
+import numpy as np
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense
+
+# Sample conversation data
+input_texts = [
+    "Hi",
+    "How are you?",
+    "What's your name?",
+    "What can you do?",
+]
+target_texts = [
+    "Hello",
+    "I'm fine, thank you!",
+    "My name is Chatbot.",
+    "I can help you with information and tasks.",
+]
+
+# Tokenization
+input_characters = sorted(list(set("".join(input_texts))))
+target_characters = sorted(list(set("".join(target_texts))))
+num_encoder_tokens = len(input_characters)
+num_decoder_tokens = len(target_characters)
+max_encoder_seq_length = max([len(txt) for txt in input_texts])
+max_decoder_seq_length = max([len(txt) for txt in target_texts])
+
+input_token_index = dict([(char, i) for i, char in enumerate(input_characters)])
+target_token_index = dict([(char, i) for i, char in enumerate(target_characters)])
+
+encoder_input_data = np.zeros(
+    (len(input_texts), max_encoder_seq_length, num_encoder_tokens), dtype="float32"
+)
+decoder_input_data = np.zeros(
+    (len(target_texts), max_decoder_seq_length, num_decoder_tokens), dtype="float32"
+)
+decoder_target_data = np.zeros(
+    (len(target_texts), max_decoder_seq_length, num_decoder_tokens), dtype="float32"
+)
+
+for i, (input_text, target_text) in enumerate(zip(input_texts, target_texts)):
+    for t, char in enumerate(input_text):
+        encoder_input_data[i, t, input_token_index[char]] = 1.0
+    for t, char in enumerate(target_text):
+        decoder_input_data[i, t, target_token_index[char]] = 1.0
+        if t > 0:
+            decoder_target_data[i, t - 1, target_token_index[char]] = 1.0
+
+# Define the model
+latent_dim = 256
+
+encoder_inputs = Input(shape=(None, num_encoder_tokens))
+encoder = LSTM(latent_dim, return_state=True)
+encoder_outputs, state_h, state_c = encoder(encoder_inputs)
+encoder_states = [state_h, state_c]
+
+decoder_inputs = Input(shape=(None, num_decoder_tokens))
+decoder_lstm = LSTM(latent_dim, return_sequences=True, return_state=True)
+decoder_outputs, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
+decoder_dense = Dense(num_decoder_tokens, activation="softmax")
+decoder_outputs = decoder_dense(decoder_outputs)
+
+model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+# Compile and train the model
+model.compile(optimizer="rmsprop", loss="categorical_crossentropy", metrics=["accuracy"])
+model.fit(
+    [encoder_input_data, decoder_input_data],
+    decoder_target_data,
+    batch_size=1,
+    epochs=50,
+    validation_split=0.2,
+)
+
+# Define inference models
+encoder_model = Model(encoder_inputs, encoder_states)
+
+decoder_state_input_h = Input(shape=(latent_dim,))
+decoder_state_input_c = Input(shape=(latent_dim,))
+decoder_states_inputs = [decoder_state_input_h, decoder_state_input_c]
+
+decoder_outputs, state_h, state_c = decoder_lstm(
+    decoder_inputs, initial_state=decoder_states_inputs
+)
+decoder_states = [state_h, state_c]
+decoder_outputs = decoder_dense(decoder_outputs)
+decoder_model = Model(
+    [decoder_inputs] + decoder_states_inputs, [decoder_outputs] + decoder_states
+)
+
+# Function to decode sequence
+def decode_sequence(input_seq):
+    states_value = encoder_model.predict(input_seq)
+
+    target_seq = np.zeros((1, 1, num_decoder_tokens))
+    target_seq[0, 0, target_token_index["\t"]] = 1.0
+
+    stop_condition = False
+    decoded_sentence = ""
+    while not stop_condition:
+        output_tokens, h, c = decoder_model.predict([target_seq] + states_value)
+
+        sampled_token_index = np.argmax(output_tokens[0, -1, :])
+        sampled_char = target_characters[sampled_token_index]
+        decoded_sentence += sampled_char
+
+        if sampled_char == "\n" or len(decoded_sentence) > max_decoder_seq_length:
+            stop_condition = True
+
+        target_seq = np.zeros((1, 1, num_decoder_tokens))
+        target_seq[0, 0, sampled_token_index] = 1.0
+
+        states_value = [h, c]
+
+    return decoded_sentence
+
+
+main code
+import nltk
+import numpy as np
+import random
+import string
+
+f=open('conversationo.csv','r',errors = 'ignore')
+raw=f.read()
+raw=raw.lower()# converts to lowercase
+nltk.download('punkt') # first-time use only
+nltk.download('wordnet') # first-time use only
+sent_tokens = nltk.sent_tokenize(raw)# converts to list of sentences
+word_tokens = nltk.word_tokenize(raw)# converts to list of words
+
+lemmer = nltk.stem.WordNetLemmatizer()
+def LemTokens(tokens):
+    return [lemmer.lemmatize(token) for token in tokens]
+remove_punct_dict = dict((ord(punct), None) for punct in string.punctuation)
+def LemNormalize(text):
+    return LemTokens(nltk.word_tokenize(text.lower().translate(remove_punct_dict)))
+
+    input_seq = encoder_input_data[seq_index : seq_index + 1]
+    decoded_sentence = decode_sequence(input_seq)
+    print("-")
+    print("Input sentence:", input_texts[seq_index])
+    print("Decoded sentence:", decoded_sentence)
+
+# Test the model
+for seq_index in range(len(input_texts)):
+    input_seq = encoder_input_data[seq_index:seq_index + 1]
+    decoded_sentence = decode_sequence(input_seq)
+    print("-")
+    print("Input sentence:", input_texts[seq_index])
+    print("Decoded sentence:", decoded_sentence) 
+
+
+
+
+final codes
+import nltk
+from nltk.chat.util import Chat, reflections
+
+# Define patterns and responses related to machine learning
+ml_patterns = [
+     (r"hi|hello|hey", ["Hello!", "Hey there!", "Hi!"]),
+    (r"how are you?", ["I'm doing well, thank you!", "I'm great, thanks for asking!"]),
+    (r"What is machine learning\??", ["Machine learning is a subset of artificial intelligence (AI) that provides systems the ability to automatically learn and improve from experience without being explicitly programmed."]),
+    (r"What are the types of machine learning\??", ["The main types of machine learning are supervised learning, unsupervised learning, and reinforcement learning."]),
+    (r"What is supervised learning\??", ["Supervised learning is a type of machine learning where the model is trained on labeled data, and it learns to make predictions based on input-output pairs."]),
+    (r"What is unsupervised learning\??", ["Unsupervised learning is a type of machine learning where the model is trained on unlabeled data, and it learns to find patterns and structure in the data."]),
+    (r"What is reinforcement learning\??", ["Reinforcement learning is a type of machine learning where an agent learns to make decisions by interacting with an environment to achieve a goal. It receives feedback in the form of rewards or penalties."]),
+     # Add more patterns and responses related to machine learning
+]
+
+# Merge all patterns and responses
+patterns = ml_patterns
+
+# Create a chatbot
+chatbot = Chat(patterns, reflections)
+
+# Start the conversation
+print("Bot: Hello! I'm a machine learning chatbot. Feel free to ask me anything about machine learning!")
+while True:
+    user_input = input("You: ")
+    response = chatbot.respond(user_input)
+    print("Bot:", response)
+
+
+
+
+
+
+
+
+
+import nltk
+import numpy as np
+import random
+import string
+
+f=open('conversationo.csv','r',errors = 'ignore')
+raw=f.read()
+raw=raw.lower()# converts to lowercase
+nltk.download('punkt') # first-time use only
+nltk.download('wordnet') # first-time use only
+sent_tokens = nltk.sent_tokenize(raw)# converts to list of sentences
+word_tokens = nltk.word_tokenize(raw)# converts to list of words
+
+lemmer = nltk.stem.WordNetLemmatizer()
+def LemTokens(tokens):
+    return [lemmer.lemmatize(token) for token in tokens]
+remove_punct_dict = dict((ord(punct), None) for punct in string.punctuation)
+def LemNormalize(text):
+    return LemTokens(nltk.word_tokenize(text.lower().translate(remove_punct_dict)))
+
+GREETING_INPUTS = ("hello", "hi", "greetings", "sup", "what's up","hey",)
+GREETING_RESPONSES = ["hi", "hey", "*nods*", "hi there", "hello", "I am glad! You are talking to me"]
+def greeting(sentence):
+
+    for word in sentence.split():
+        if word.lower() in GREETING_INPUTS:
+            return random.choice(GREETING_RESPONSES)
+
+from sklearn.feature_extraction.text import TfidfVectorizer # which is to convert a collection of raw documents to a matrix of TF-IDF features.
+from sklearn.metrics.pairwise import cosine_similarity #Cosine similarity is a measure of similarity between two non-zero vectors of an inner product space
+
+def response(user_response):
+    robo_response=''
+    sent_tokens.append(user_response)
+    TfidfVec = TfidfVectorizer(tokenizer=LemNormalize, stop_words='english')
+    tfidf = TfidfVec.fit_transform(sent_tokens)
+    vals = cosine_similarity(tfidf[-1], tfidf)
+    idx=vals.argsort()[0][-2]
+    flat = vals.flatten()
+    flat.sort()
+    req_tfidf = flat[-2]
+    if(req_tfidf==0):
+        robo_response=robo_response+"I am sorry! I don't understand you"
+        return robo_response
+    else:
+        robo_response = robo_response+sent_tokens[idx]
+        return robo_response
+
+flag=True
+print("Cafebot: My name is Cafebot. I will answer your queries about Cafe. If you want to exit, type Bye!")
+while(flag==True):
+    user_response = input()
+    user_response=user_response.lower()
+    if(user_response!='bye'):
+        if(user_response=='thanks' or user_response=='thank you' ):
+            flag=False
+            print("Cafebot: You are welcome..")
+        else:
+            if(greeting(user_response)!=None):
+                print("Cafebot: "+greeting(user_response))
+            else:
+                print("Cafebot: ",end="")
+                print(response(user_response))
+                sent_tokens.remove(user_response)
+    else:
+        flag=False
+        print("ROBO: Bye! take care..")
+
+
+
+main code
+import nltk
+import numpy as np
+import random
+import string
+
+f=open('conversationo.csv','r',errors = 'ignore')
+raw=f.read()
+raw=raw.lower()# converts to lowercase
+nltk.download('punkt') # first-time use only
+nltk.download('wordnet') # first-time use only
+sent_tokens = nltk.sent_tokenize(raw)# converts to list of sentences
+word_tokens = nltk.word_tokenize(raw)# converts to list of words
+
+lemmer = nltk.stem.WordNetLemmatizer()
+def LemTokens(tokens):
+    return [lemmer.lemmatize(token) for token in tokens]
+remove_punct_dict = dict((ord(punct), None) for punct in string.punctuation)
+def LemNormalize(text):
+    return LemTokens(nltk.word_tokenize(text.lower().translate(remove_punct_dict)))
+
+GREETING_INPUTS = ("hello", "hi", "greetings", "sup", "what's up","hey",)
+GREETING_RESPONSES = ["hi", "hey", "*nods*", "hi there", "hello", "I am glad! You are talking to me"]
+def greeting(sentence):
+
+    for word in sentence.split():
+        if word.lower() in GREETING_INPUTS:
+            return random.choice(GREETING_RESPONSES)
+
+from sklearn.feature_extraction.text import TfidfVectorizer # which is to convert a collection of raw documents to a matrix of TF-IDF features.
+from sklearn.metrics.pairwise import cosine_similarity #Cosine similarity is a measure of similarity between two non-zero vectors of an inner product space
+
+def response(user_response):
+    robo_response=''
+    sent_tokens.append(user_response)
+    TfidfVec = TfidfVectorizer(tokenizer=LemNormalize, stop_words='english')
+    tfidf = TfidfVec.fit_transform(sent_tokens)
+    vals = cosine_similarity(tfidf[-1], tfidf)
+    idx=vals.argsort()[0][-2]
+    flat = vals.flatten()
+    flat.sort()
+    req_tfidf = flat[-2]
+    if(req_tfidf==0):
+        robo_response=robo_response+"I am sorry! I don't understand you"
+        return robo_response
+    else:
+        robo_response = robo_response+sent_tokens[idx]
+        return robo_response
+
+from sklearn.naive_bayes import MultinomialNB
+
+# ... existing code ...
+
+# Train the Naive Bayes classifier (replace with your dataset and labels)
+X_train = ['conversationo.csv']  # Training data (preprocessed text)
+y_train = ['food.csv']  # Labels (corresponding categories/intents)
+#clf = MultinomialNB().fit(X_train, y_train)
+
+def respond(user_response, conversation_history):
+    # ... existing code ...
+
+    # Classify user intent using the trained model
+    predicted_intent = clf.predict([preprocess_text(user_response)])[0]
+
+    # Handle different intents based on the prediction
+    if predicted_intent == "greeting":
+        robo_response = greet(user_response)
+    elif predicted_intent == "cafe_inquiry":
+        # Retrieve relevant information from your knowledge base or dataset
+        robo_response = "Here's information about the cafe item you asked about..."
+    # ... add other intent handling logic ...
+    else:
+        # Use TF-IDF fallback for unclassified intents
+        robo_response = response(user_response, conversation_history)
+
+    return robo_response
+
+# Optional libraries for specific algorithms (install as needed)
+from sklearn.naive_bayes import MultinomialNB  # Naive Bayes (Classification)
+#from haystack.document_store import InMemoryDocumentStore
+#from haystack.retriever import BM25Retriever  # BM25 (Information Retrieval)
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense  # LSTM (Sequence-to-Sequence)
+
+
+def preprocess_text(text):
+    """Preprocesses text by converting to lowercase, removing punctuation, and lemmatizing."""
+    remove_punct_dict = dict((ord(punct), None) for punct in string.punctuation)
+    text = text.lower().translate(remove_punct_dict)
+    lemmer = WordNetLemmatizer()
+    return [lemmer.lemmatize(token) for token in nltk.word_tokenize(text)]
+
+def greet(user_response):
+    """Handles greetings from the user."""
+    GREETING_INPUTS = ("hello", "hi", "greetings", "sup", "what's up", "hey")
+    GREETING_RESPONSES = ["hi", "hey", "*nods*", "hi there", "hello", "I am glad you're here!"]
+    for word in user_response.split():
+        if word.lower() in GREETING_INPUTS:
+            return random.choice(GREETING_RESPONSES)
+    return None
+
+def respond(user_response, conversation_history, algorithm=None, **kwargs):
+    """Generates a response using an appropriate algorithm (if specified)."""
+    robo_response = ''
+
+    # Preprocess user response and conversation history
+    user_response_processed = preprocess_text(user_response)
+    conversation_history_processed = []
+    for sentence in conversation_history:
+        conversation_history_processed.extend(preprocess_text(sentence))
+
+    # Choose response generation method based on algorithm
+    if algorithm == 'tfidf':
+        # TF-IDF similarity fallback
+        TfidfVec = TfidfVectorizer(tokenizer=LemNormalize, stop_words='english')
+        tfidf = TfidfVec.fit_transform(conversation_history_processed + [user_response_processed])
+        vals = cosine_similarity(tfidf[-1], tfidf)
+        idx = vals.argsort()[0][-2]
+        flat = vals.flatten()
+        flat.sort()
+        req_tfidf = flat[-2]
+        if req_tfidf == 0:
+            robo_response = "I am sorry, I don't understand you."
+        else:
+            robo_response = conversation_history_processed[idx]
+
+    elif algorithm == 'naive_bayes':
+        # Classification with Naive Bayes (optional)
+        # Requires a trained Naive Bayes model and labeled dataset (intent classification)
+        if 'clf' in kwargs:
+            predicted_intent = kwargs['clf'].predict([user_response_processed])[0]
+            # Handle different intents based on prediction (implement logic here)
+        else:
+            print("Error: Naive Bayes requires a trained classifier (provide 'clf' argument)")
+            return "Something went wrong. Using TF-IDF fallback..."
+
+    elif algorithm == 'bm25':
+        # Information Retrieval with BM25 (optional)
+        # Requires a populated document store and BM25 retriever (knowledge base retrieval)
+        if 'document_store' in kwargs and 'retriever' in kwargs:
+            query = preprocess_text(user_response)
+            retrieved_documents = kwargs['retriever'].retrieve(query=query, top_k=3)
+            # Generate response based on retrieved documents (implement logic here)
+        else:
+            print('error')
+
+flag=True
+print("Cafebot: My name is Cafebot. I will answer your queries about Cafe. If you want to exit, type Bye!")
+while(flag==True):
+    user_response = input()
+    user_response=user_response.lower()
+    if(user_response!='bye'):
+        if(user_response=='thanks' or user_response=='thank you' ):
+            flag=False
+            print("Cafebot: You are welcome..")
+        else:
+            if(greeting(user_response)!=None):
+                print("Cafebot: "+greeting(user_response))
+            else:
+                print("Cafebot: ",end="")
+                print(response(user_response))
+                sent_tokens.remove(user_response)
+    else:
+        flag=False
+        print("ROBO: Bye! take care..")
